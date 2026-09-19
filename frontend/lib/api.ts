@@ -16,6 +16,22 @@ export type Alert = {
   fired_at: string;
 };
 
+export type Deploy = {
+  id: number;
+  service_id: number;
+  commit_sha: string;
+  description: string;
+  deployed_at: string;
+};
+
+export type PastIncident = {
+  id: number;
+  service_id: number;
+  signature: string;
+  root_cause: string;
+  resolved_at: string;
+};
+
 export type Hypothesis = {
   cause: string;
   confidence: "high" | "medium" | "low";
@@ -61,6 +77,8 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
 export const fetchAlerts = () => getJson<Alert[]>("/alerts/");
 export const fetchAlert = (id: number) => getJson<Alert>(`/alerts/${id}/`);
 export const fetchServices = () => getJson<Service[]>("/services/");
+export const fetchDeploys = () => getJson<Deploy[]>("/deploys/");
+export const fetchIncidents = () => getJson<PastIncident[]>("/incidents/");
 export const fetchRuns = () => getJson<AgentRun[]>("/runs/");
 
 export const investigateAlert = (alertId: number) =>

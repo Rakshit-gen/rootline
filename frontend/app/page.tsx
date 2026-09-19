@@ -57,6 +57,9 @@ export default function Home() {
           <Link href="/services" className="underline">
             Services
           </Link>
+          <Link href="/history" className="underline">
+            History
+          </Link>
         </div>
       </header>
 
