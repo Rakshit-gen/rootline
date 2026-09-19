@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { fetchAlerts, investigateAlert, runsExportUrl, type Alert } from "@/lib/api";
+import { fetchAlerts, fetchRuns, investigateAlert, runsExportUrl, type Alert, type AgentRun } from "@/lib/api";
 
 const STATUS_STYLES: Record<Alert["status"], string> = {
   open: "bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-100",
@@ -19,15 +19,21 @@ const FILTERS: Array<{ label: string; value: Alert["status"] | "all" }> = [
 
 export default function Home() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [runs, setRuns] = useState<AgentRun[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [investigating, setInvestigating] = useState<number | null>(null);
   const [filter, setFilter] = useState<Alert["status"] | "all">("all");
 
   function reload() {
     fetchAlerts().then(setAlerts).catch((err) => setError(err.message));
+    fetchRuns().then(setRuns).catch((err) => setError(err.message));
   }
 
   useEffect(reload, []);
+
+  function confirmedCauseFor(alertId: number): string | null {
+    return runs.find((r) => r.alert_id === alertId)?.confirmed_hypothesis ?? null;
+  }
 
   const visibleAlerts = filter === "all" ? alerts : alerts.filter((a) => a.status === filter);
 
@@ -92,6 +98,11 @@ export default function Home() {
                 {a.title}
               </Link>
               <p className="text-sm text-zinc-500">{a.description}</p>
+              {a.status === "resolved" && confirmedCauseFor(a.id) && (
+                <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-400">
+                  Root cause: {confirmedCauseFor(a.id)}
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLES[a.status]}`}>
