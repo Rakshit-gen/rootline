@@ -3,8 +3,9 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session
 
-from .llm import LLMClient, MockLLMClient
+from .llm import LLMClient
 from .models import Alert, AgentRun, AgentStep, Service
+from .openai_client import get_llm_client
 from .tools import build_default_registry
 
 MAX_STEPS = 6
@@ -14,7 +15,7 @@ def run_agent(session: Session, alert: Alert, llm: LLMClient | None = None) -> A
     """Drive one alert through the observe -> plan -> act loop until the
     investigator finishes with a ranked list of hypotheses.
     """
-    llm = llm or MockLLMClient()
+    llm = llm or get_llm_client()
     registry = build_default_registry(session, alert.fired_at)
     service = session.get(Service, alert.service_id)
 
