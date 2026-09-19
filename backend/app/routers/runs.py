@@ -50,6 +50,8 @@ def investigate_alert(alert_id: int, session: Session = Depends(get_session)):
     alert = session.get(Alert, alert_id)
     if not alert:
         raise HTTPException(404, "Alert not found.")
+    if alert.status == "resolved":
+        raise HTTPException(409, "Alert is already resolved.")
     alert.status = "investigating"
     session.add(alert)
     session.commit()

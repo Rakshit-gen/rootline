@@ -67,6 +67,19 @@ def test_confirm_hypothesis_resolves_the_alert(client):
     assert alert_after["status"] == "resolved"
 
 
+def test_cannot_reinvestigate_a_resolved_alert(client):
+    service_id = client.post("/api/services/", json={"name": "payments", "owner_team": "commerce"}).json()["id"]
+    alert_id = client.post("/api/alerts/", json={
+        "service_id": service_id, "title": "payment errors", "description": "",
+        "fired_at": datetime.now(timezone.utc).isoformat(),
+    }).json()["id"]
+    run_id = client.post(f"/api/alerts/{alert_id}/investigate/").json()["id"]
+    client.post(f"/api/runs/{run_id}/confirm/", json={"cause": "manual root cause"})
+
+    resp = client.post(f"/api/alerts/{alert_id}/investigate/")
+    assert resp.status_code == 409
+
+
 def test_create_deploy_requires_existing_service(client):
     resp = client.post("/api/deploys/", json={
         "service_id": 999, "commit_sha": "abc", "description": "x",
