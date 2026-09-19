@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .db import init_db
+from .routers import alerts, runs, services
 
 
 @asynccontextmanager
@@ -20,3 +21,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(services.router, prefix="/api")
+app.include_router(alerts.router, prefix="/api")
+app.include_router(runs.router, prefix="/api")
