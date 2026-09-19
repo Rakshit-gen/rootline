@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlmodel import Session
 
@@ -36,7 +36,7 @@ def run_agent(session: Session, alert: Alert, llm: LLMClient | None = None) -> A
         if action.tool_name is None:
             run.status = "completed"
             run.hypotheses = [asdict(h) for h in action.hypotheses]
-            run.decided_at = datetime.utcnow()
+            run.decided_at = datetime.now(timezone.utc)
             session.add(run)
             session.add(AgentStep(
                 run_id=run.id, step_number=step_number, thought=action.thought,
@@ -56,7 +56,7 @@ def run_agent(session: Session, alert: Alert, llm: LLMClient | None = None) -> A
 
     run.status = "completed"
     run.hypotheses = [{"cause": "Step budget exhausted before a conclusion.", "confidence": "low", "evidence": ""}]
-    run.decided_at = datetime.utcnow()
+    run.decided_at = datetime.now(timezone.utc)
     session.add(run)
     session.commit()
     session.refresh(run)

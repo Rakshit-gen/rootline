@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Column, JSON
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Service(SQLModel, table=True):
@@ -43,8 +43,10 @@ class AgentRun(SQLModel, table=True):
     status: str = Field(default="running")  # running | completed
     hypotheses: list = Field(default_factory=list, sa_column=Column(JSON))
     confirmed_hypothesis: Optional[str] = None
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     decided_at: Optional[datetime] = None
+
+    steps: list["AgentStep"] = Relationship(back_populates="run")
 
 
 class AgentStep(SQLModel, table=True):
@@ -55,3 +57,5 @@ class AgentStep(SQLModel, table=True):
     tool_name: str = Field(default="")
     tool_args: dict = Field(default_factory=dict, sa_column=Column(JSON))
     observation: dict = Field(default_factory=dict, sa_column=Column(JSON))
+
+    run: Optional[AgentRun] = Relationship(back_populates="steps")
