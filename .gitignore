@@ -1,0 +1,24 @@
+# Python / FastAPI
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+backend/*.db
+backend/.pytest_cache/
+*.pyc
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+npm-debug.log*
+
+# Env
+.env
+.env.local
