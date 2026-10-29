@@ -1,80 +1,107 @@
 # rootline
 
-An agentic incident investigation assistant that automates the first ten
-minutes of an on-call page: correlating deploys, logs, past incidents, and
-service dependencies into a ranked, evidence-backed list of root-cause
-hypotheses.
+Does the first ten minutes of an on-call page for you. When an alert fires, rootline checks whether the service was just deployed, what is failing, whether this has happened before and whether something upstream is also down. It then gives you a ranked list of likely causes, each with the evidence behind it.
 
-## The problem
+It only reads. It does not restart, roll back or page anyone.
 
-PagerDuty and Opsgenie tell you *that* something broke. They don't tell
-you *why*. The engineer who gets paged still has to manually check "did we
-deploy recently," grep logs, remember whether this looks like a past
-incident, and check whether an upstream dependency is also down — all
-before they've written a single line of code. That's dead time on every
-page, and it's the same four checks every time.
+## Why
 
-`rootline` automates exactly those four checks and nothing else. It
-doesn't touch your infrastructure, restart anything, or page anyone; it
-gathers evidence and ranks hypotheses so the human starts debugging with
-a head start instead of a blank page.
+PagerDuty and Opsgenie tell you that something broke, not why. The person who gets paged still runs the same four checks by hand every time: did we deploy, what do the logs say, have we seen this before, is a dependency down. rootline runs exactly those four checks and hands you the results, so you start debugging with evidence instead of a blank page.
 
-## How the agent works
+## How it works
 
-Each alert runs through an observe → plan → act loop, persisted step by
-step:
+Each investigation runs a loop of up to 6 steps. The planner picks one tool per step:
 
-1. **get_recent_deploys** — did this service deploy in the hours before
-   the alert fired?
-2. **get_error_logs** — what's actually failing right now?
-3. **search_past_incidents** — has this exact symptom happened before, and
-   what was the root cause that time?
-4. **get_service_dependencies** — is an upstream dependency also
-   currently alerting?
+| Tool | What it returns |
+|---|---|
+| `get_recent_deploys` | Deploys to this service in the 6 hours before the alert fired |
+| `get_error_logs` | Recent error lines for the service (a stub today, see Limits) |
+| `search_past_incidents` | Up to 3 past incidents on this service whose signature shares words with the alert title, with their root cause |
+| `get_service_dependencies` | This service's dependencies, and which of them have an open alert right now |
 
-The planner (`LLMClient`) is a protocol, not a hardcoded call. By default
-it's `MockLLMClient` — deterministic, rule-based, no network calls, no API
-key — so the project runs and its test suite passes with zero setup. Set
-`OPENAI_API_KEY` and the engine switches to `OpenAIClient`, which asks a
-real model for the same JSON-shaped decision at each step. The loop, the
-tools, and the audit trail don't change — only the planner does.
+When it has enough, the planner finishes with ranked hypotheses:
 
-Hypotheses are ranked by evidence strength (a recent deploy outranks a
-vague past-incident match), and a human explicitly confirms which one was
-actually the cause — that confirmation is what resolves the alert, not
-the agent's own confidence score.
+| Evidence | Confidence |
+|---|---|
+| A deploy shortly before the alert | high |
+| A matching past incident | medium |
+| A dependency with an open alert | medium |
+| Nothing found | low, "no strong signal" |
 
-## Stack
+A deploy ranks first because it is the most common cause and the easiest to act on.
 
-- **Backend**: FastAPI + SQLModel, SQLite for local/demo use.
-- **Frontend**: Next.js (App Router) + TypeScript + Tailwind.
+Every step is saved with the planner's thought, the tool, its input and its output. The alert is only resolved when a person confirms which hypothesis was the real cause. The agent's own confidence never closes anything.
 
-## Running locally
+### Two planners, one loop
+
+The planner is an interface (`backend/app/llm.py`):
+
+- **`MockLLMClient`** (default). Runs the four checks in order and ranks with the table above. No network, no key, deterministic, so tests pass offline.
+- **`OpenAIClient`**. Used when `OPENAI_API_KEY` is set. Sends the alert and step history to `gpt-4o-mini` and asks for the next action as JSON.
+
+## Quickstart
+
+Backend:
 
 ```bash
-# backend
 cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python -m app.seed
 uvicorn app.main:app --reload
+```
 
-# frontend
+Frontend, in another terminal:
+
+```bash
 cd frontend
+cp env.example .env.local
 npm install
 npm run dev
 ```
 
-Open the frontend, click "Investigate" on an open alert, and read the
-trace before confirming which hypothesis was the real root cause. Set
-`OPENAI_API_KEY` in the backend's environment to use a real model instead
-of the deterministic mock planner.
+Open http://localhost:3000, click **Investigate** on an open alert, read the trace, then confirm which hypothesis was right.
 
-## What's not built
+## Configuration
 
-No live integration with a real APM/log backend (Datadog, Honeycomb,
-Loki) — `get_error_logs` is a stand-in for what would be a real query.
-No automatic remediation or rollback; this investigates, it doesn't act.
-No alerting webhook ingestion from PagerDuty/Opsgenie — alerts are
-created directly in the app for the same reason tickets are in
-`triagepilot`: the agent loop is the point, not the integration surface.
+| Variable | Where | Default | What it does |
+|---|---|---|---|
+| `OPENAI_API_KEY` | backend | unset | Switches to the OpenAI planner |
+| `DATABASE_URL` | backend | `sqlite:///./rootline.db` | Any SQLAlchemy URL |
+| `NEXT_PUBLIC_API_BASE` | frontend | `http://127.0.0.1:8000/api` | Backend URL |
+
+## API
+
+All under `/api`.
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/alerts/{id}/investigate/` | Run an investigation, returns the run with steps and hypotheses |
+| `POST` | `/runs/{id}/confirm/` | Body `{"cause": "..."}`. Records the real cause and resolves the alert |
+| `GET` | `/runs/`, `/runs/{id}/` | Read runs |
+| `GET` | `/runs/export/` | All runs as CSV |
+| `GET`, `POST` | `/alerts/` | List or create alerts |
+| `GET`, `POST` | `/services/`, `/deploys/`, `/incidents/` | The data the tools read |
+
+## Layout
+
+```
+backend/app/engine.py         the investigation loop
+backend/app/llm.py            planner interface, mock planner, hypothesis ranking
+backend/app/openai_client.py  OpenAI planner
+backend/app/tools.py          the four checks
+backend/app/seed.py           demo services, deploys, incidents and alerts
+backend/app/routers/          HTTP routes
+backend/tests/                engine, API and planner selection tests
+frontend/app/                 open alerts, investigation view, history, services
+```
+
+Tests: `cd backend && pytest`.
+
+## Limits
+
+- `get_error_logs` returns a fixed line. There is no Loki, Datadog or Honeycomb connection yet.
+- Past incident search is word overlap with the alert title, not semantic search.
+- Alerts are created in the app. There is no PagerDuty or Opsgenie webhook.
+- Investigation only. No remediation or rollback, on purpose.
+- SQLite and no auth by default.
